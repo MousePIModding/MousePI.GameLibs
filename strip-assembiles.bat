@@ -1,37 +1,25 @@
-@echo off 
+@echo off
+setlocal
 
-@REM Add all the assemblies you want to publicize in this list
-set toPublicize=Assembly-CSharp.dll Assembly-CSharp-firstpass.dll
+if "%~1"=="" (
+  echo Usage: %~nx0 ^<PathToGame.exe^> [UnityVersion]
+  pause
+  exit /b 1
+)
 
-@REM Add all the assemblies you want to copy as-is to the package in this list
-set dontTouch=
+set scriptPath=%~dp0strip-assemblies.ps1
 
-set exePath=%1
-echo exePath: %exePath% 
+if "%~2"=="" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%scriptPath%" "%~1"
+) else (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%scriptPath%" "%~1" "%~2"
+)
 
-@REM Remove quotes
-set exePath=%exePath:"=%
-
-set managedPath=%exePath:.exe=_Data\Managed%
-echo managedPath: %managedPath%
-
-set outPath=%~dp0\package\lib
-
-@REM Strip all assembiles, but keep them private.
-%~dp0\tools\NStrip.exe "%managedPath%" -o %outPath%
-
-@REM Strip and publicize assemblies from toPublicize.
-(for %%a in (%toPublicize%) do (
-  echo a: %%a
-
-  %~dp0\tools\NStrip.exe "%managedPath%\%%a" -o "%outPath%\%%a" -cg -p --cg-exclude-events
-))
-
-@REM Copy over original assemblies for ones we don't want to touch.
-(for %%a in (%dontTouch%) do (
-  echo a: %%a
-
-  xcopy "%managedPath%\%%a" "%outPath%\%%a" /y /v
-))
+set exitCode=%ERRORLEVEL%
+if not "%exitCode%"=="0" (
+  echo.
+  echo Failed with exit code %exitCode%.
+)
 
 pause
+exit /b %exitCode%

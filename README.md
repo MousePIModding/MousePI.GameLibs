@@ -4,10 +4,12 @@ Creates nugets with stripped and publicized libraries for Unity game modding.
 
 If the game gets updated, this package needs to get updated too.
 
-`strip-assembiles.bat` does two things:
+`strip-assembiles.bat` does three things:
 
-- Strips game assembiles using [NStrip](https://github.com/BepInEx/NStrip). This removes game code and leaves only API definitions.
-- Publicizes `Assembly.CSharp.dll` and `AAssembly-CSharp-firstpass.dll`. This makes all types, methods, properties and fields public, to make modding easier.
+- Downloads full Unity engine and corlib reference assemblies for the game's Unity version from [unity.bepinex.dev/libraries](https://unity.bepinex.dev/libraries/) and [unity.bepinex.dev/corlibs](https://unity.bepinex.dev/corlibs/).
+- Replaces any matching stripped game-shipped Unity/corlib assemblies with those full reference assemblies as temporary inputs, then hollows everything with [NStrip](https://github.com/BepInEx/NStrip).
+- Runs a final Mono.Cecil-based hollowing pass over the generated package assemblies so method bodies missed by NStrip, such as default interface implementations, are removed too.
+- Publicizes configured game assemblies. This makes all types, methods, properties and fields public, to make modding easier.
 
 ## Usage
 
@@ -27,8 +29,12 @@ If the game gets updated, this package needs to get updated too.
 ### Generate the stripped libraries
 
 - Make sure you start off with a clean version of the game files, with no extra/modified dlls.
+- Make sure the .NET SDK is installed. It is used by the final hollowing pass.
 - Drag the game's exe and drop it on `strip-assembiles.bat`.
 - Dlls are stripped, publicized, and placed in `package\lib`.
+- The script tries to derive the Unity version from `UnityPlayer.dll`.
+- If version detection fails, or you want to force a version, run `strip-assembiles.bat "C:\Path\Game.exe" 2022.3.62`.
+- To check the detected Unity version without downloading or regenerating DLLs, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\strip-assemblies.ps1 "C:\Path\Game.exe" -VersionOnly`.
 
 ### Updating the Nuget
 
@@ -38,8 +44,8 @@ If the game gets updated, this package needs to get updated too.
 
 ### Publicized assemblies
 
-By default, only `Assembly-CSharp.dll` and `Assembly-CSharp-firstpass.dll` are publicized. All other dlls are stripped only. To publicize other dlls, edit `strip-assemblies.bat` and add the dll names to the `toPublicize` variable.
+By default, only `Assembly-CSharp.dll`, `Mouse.dll`, and `Mouse.PackedSprites.dll` are publicized. All other dlls are stripped only. To publicize other dlls, edit `strip-assemblies.ps1` and add the dll names to the `$ToPublicize` variable.
 
 ### Untouched assemblies
 
-By default, every game assembly gets stripped. If there's any assembly you wish to keep in the package in their original state, add the dll names to the `dontTouch` variable.
+By default, every game assembly gets stripped. If there's any assembly you wish to keep in the package in its original state, add the dll names to the `$DontTouch` variable in `strip-assemblies.ps1`.
