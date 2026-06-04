@@ -23,21 +23,29 @@ var changedAssemblies = 0;
 var hollowedMethods = 0;
 var alreadyHollowMethods = 0;
 var methodsWithoutBodies = 0;
+var removedNetstandardReferences = 0;
 var failures = new List<string>();
 
 foreach (var assemblyPath in assemblies)
 {
     try
     {
-        var changedMethods = HollowAssembly(assemblyPath, out var alreadyHollow, out var withoutBodies);
+        var changedMethods = HollowAssembly(
+            assemblyPath,
+            out var alreadyHollow,
+            out var withoutBodies,
+            out var removedNetstandard);
+
         alreadyHollowMethods += alreadyHollow;
         methodsWithoutBodies += withoutBodies;
+        removedNetstandardReferences += removedNetstandard;
 
-        if (changedMethods > 0)
+        if (changedMethods > 0 || removedNetstandard > 0)
         {
             changedAssemblies++;
             hollowedMethods += changedMethods;
-            Console.WriteLine($"Hollowed {changedMethods} remaining method bodies in {Path.GetFileName(assemblyPath)}");
+            Console.WriteLine(
+                $"Updated {Path.GetFileName(assemblyPath)}: hollowed {changedMethods} remaining method bodies, removed {removedNetstandard} netstandard references");
         }
     }
     catch (Exception ex)
@@ -51,6 +59,7 @@ Console.WriteLine($"Assemblies changed: {changedAssemblies}");
 Console.WriteLine($"Remaining method bodies hollowed: {hollowedMethods}");
 Console.WriteLine($"Already hollow method bodies: {alreadyHollowMethods}");
 Console.WriteLine($"Methods without bodies: {methodsWithoutBodies}");
+Console.WriteLine($"netstandard references removed: {removedNetstandardReferences}");
 
 if (failures.Count == 0)
 {
@@ -79,10 +88,15 @@ static IEnumerable<string> ExpandAssemblyPaths(string path)
     throw new FileNotFoundException($"Assembly or directory was not found: {path}", path);
 }
 
-static int HollowAssembly(string assemblyPath, out int alreadyHollowMethods, out int methodsWithoutBodies)
+static int HollowAssembly(
+    string assemblyPath,
+    out int alreadyHollowMethods,
+    out int methodsWithoutBodies,
+    out int removedNetstandardReferences)
 {
     alreadyHollowMethods = 0;
     methodsWithoutBodies = 0;
+    removedNetstandardReferences = 0;
 
     var assemblyDirectory = Path.GetDirectoryName(assemblyPath) ?? ".";
     var resolver = new DefaultAssemblyResolver();
@@ -94,6 +108,8 @@ static int HollowAssembly(string assemblyPath, out int alreadyHollowMethods, out
         InMemory = true,
         ReadSymbols = false
     });
+
+    removedNetstandardReferences = RetargetNetstandardReferences(module);
 
     var changedMethods = 0;
     foreach (var method in module.Types.SelectMany(AllTypes).SelectMany(type => type.Methods))
@@ -114,7 +130,7 @@ static int HollowAssembly(string assemblyPath, out int alreadyHollowMethods, out
         changedMethods++;
     }
 
-    if (changedMethods == 0)
+    if (changedMethods == 0 && removedNetstandardReferences == 0)
     {
         return 0;
     }
@@ -127,6 +143,47 @@ static int HollowAssembly(string assemblyPath, out int alreadyHollowMethods, out
     File.Move(tempPath, assemblyPath, overwrite: true);
 
     return changedMethods;
+}
+
+static int RetargetNetstandardReferences(ModuleDefinition module)
+{
+    var netstandardReferences = module.AssemblyReferences
+        .Where(reference => reference.Name == "netstandard")
+        .ToArray();
+
+    if (netstandardReferences.Length == 0)
+    {
+        return 0;
+    }
+
+    var mscorlibReference = module.AssemblyReferences
+        .FirstOrDefault(reference => reference.Name == "mscorlib");
+
+    if (mscorlibReference is null)
+    {
+        mscorlibReference = new AssemblyNameReference("mscorlib", new Version(4, 0, 0, 0))
+        {
+            PublicKeyToken = Convert.FromHexString("B77A5C561934E089")
+        };
+
+        module.AssemblyReferences.Add(mscorlibReference);
+    }
+
+    foreach (var typeReference in module.GetTypeReferences())
+    {
+        if (typeReference.Scope is AssemblyNameReference assemblyReference
+            && assemblyReference.Name == "netstandard")
+        {
+            typeReference.Scope = mscorlibReference;
+        }
+    }
+
+    foreach (var reference in netstandardReferences)
+    {
+        module.AssemblyReferences.Remove(reference);
+    }
+
+    return netstandardReferences.Length;
 }
 
 static bool IsThrowNullBody(MethodDefinition method)

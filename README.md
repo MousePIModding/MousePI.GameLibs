@@ -8,7 +8,7 @@ If the game gets updated, this package needs to get updated too.
 
 - Downloads full Unity engine and corlib reference assemblies for the game's Unity version from [unity.bepinex.dev/libraries](https://unity.bepinex.dev/libraries/) and [unity.bepinex.dev/corlibs](https://unity.bepinex.dev/corlibs/).
 - Replaces any matching stripped game-shipped Unity/corlib assemblies with those full reference assemblies as temporary inputs, then hollows everything with [NStrip](https://github.com/BepInEx/NStrip).
-- Runs a final Mono.Cecil-based hollowing pass over the generated package assemblies so method bodies missed by NStrip, such as default interface implementations, are removed too.
+- Runs a final Mono.Cecil-based pass over the generated package assemblies so method bodies missed by NStrip, such as default interface implementations, are removed too. This also retargets Unity reference assemblies from `netstandard` back to the game's `mscorlib` profile.
 - Publicizes configured game assemblies. This makes all types, methods, properties and fields public, to make modding easier.
 
 ## Usage
